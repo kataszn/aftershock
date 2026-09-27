@@ -7,9 +7,13 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "typecheck": "turbo run typecheck",
+    "tc": "turbo run typecheck",
     "clean": "turbo run clean",
-    "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "db:generate": "pnpm --filter @aftershock/db db:generate",
+    "db:migrate": "pnpm --filter @aftershock/db db:migrate",
+    "db:push": "pnpm --filter @aftershock/db db:push",
+    "db:studio": "pnpm --filter @aftershock/db db:studio"
   },
   "packageManager": "pnpm@10.26.2",
   "devDependencies": {

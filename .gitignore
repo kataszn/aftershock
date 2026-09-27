@@ -11,6 +11,9 @@ build/
 out/
 coverage/
 
+# Drizzle
+packages/db/drizzle/meta/
+
 # Environment
 .env
 .env.*

@@ -7,7 +7,7 @@ export type HazardDetected = {
   lat: number;
   lon: number;
   depthKm: number;
-  occurredAt: string;
+  occurredAt: Date;
 };
 
 export type AlertTriggered = {
