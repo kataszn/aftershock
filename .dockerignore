@@ -1,0 +1,35 @@
+# Dependencies — never copy node_modules into the build context
+node_modules/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+coverage/
+tsconfig.tsbuildinfo
+.turbo/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+.private/
+
+# Git
+.git/
+.gitignore
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Tests
+coverage/
