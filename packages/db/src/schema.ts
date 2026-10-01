@@ -1,4 +1,4 @@
-import { boolean, index, jsonb, numeric, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { boolean, index, jsonb, numeric,integer, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { createId } from '@paralleldrive/cuid2';
 
 // SeismicEvent — USGS event ID is the natural dedup key
@@ -95,3 +95,17 @@ export const webhookSubscriptions = pgTable('webhook_subscriptions', {
   active: boolean('active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const alertDeliveries = pgTable(
+  'alert_deliveries',
+  {
+    id: text('id').primaryKey().$defaultFn(() => createId()),
+    alertId: text('alert_id').notNull().references(() => alerts.id),
+    subscriptionId: text('subscription_id').notNull().references(() => webhookSubscriptions.id),
+    status: text('status').notNull().default('PENDING'), // 'PENDING' | 'DELIVERED' | 'FAILED'
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
+    deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+  },
+  (t) => [uniqueIndex('alert_deliveries_alert_subscription_unique').on(t.alertId, t.subscriptionId)],
+);
