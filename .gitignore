@@ -17,6 +17,9 @@ packages/db/drizzle/meta/
 .env
 .env.*
 !.env.example
+api-task-def.json
+worker-task-def.json
+trust-policy.json
 
 # Logs
 *.log

@@ -23,18 +23,16 @@ const SEED_STRUCTURES = [
   { name: 'Riverside Community Center', lat: 34.0, lon: -117.4, structureType: 'generic_structure' as const },
 ];
 
-// Seeded post-deploy once the API URL is known — kept empty for local dev so
-// no localhost endpoint receives deliveries.
-const SEED_WEBHOOKS_SUBSCRIPTIONS: { url: string; secret: string }[] = [
+const SEED_WEBHOOKS_SUBSCRIPTIONS = [
   // A real receiving endpoint, part of your own deployed service — doubles
   // as both your test target during development and a legitimate "this is
   // how a real consumer would receive alerts" demo piece in the writeup.
   // Must match the API route: webhookTestRouter.post('/receive') mounted at
   // /api/webhooks → full path is /api/webhooks/receive.
-  // {
-  //   url: 'http://localhost:8000/api/webhooks/receive',
-  //   secret: 'supersecret',
-  // },
+  { 
+    url: 'http://localhost:8000/api/webhooks/receive', 
+    secret: 'supersecret',
+  },
 ];
 
 async function seedStructures() {
