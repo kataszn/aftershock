@@ -9,6 +9,8 @@ import { alertsRouter } from './features/alerts/api/v1/router';
 
 const app = new Hono();
 
+app.get('/health', (c) => c.text('ok'));
+
 app.route('/api/hazards', hazardsRouter);
 app.route('/api/structures', structuresRouter);
 app.route('/api/alerts', alertsRouter);
