@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Aftershock — Live Hazard Exposure</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.4rem; }
+    section { margin-bottom: 2.5rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #ddd; }
+    .bucket-CRITICAL { color: #b00020; font-weight: 600; }
+    .bucket-HIGH { color: #d46b00; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Aftershock</h1>
+  <p>Real-time seismic hazard exposure monitoring — real USGS events, durable event-driven pipeline.</p>
+
+  <section>
+    <h2>Monitored Structures</h2>
+    <table id="structures-table"><tbody></tbody></table>
+  </section>
+
+  <section>
+    <h2>Recent Hazard Events</h2>
+    <table id="hazards-table"><tbody></tbody></table>
+  </section>
+
+  <section>
+    <h2>Alerts</h2>
+    <table id="alerts-table"><tbody></tbody></table>
+  </section>
+
+<script>
+  // Duplicated from @repo/shared/risk-thresholds:
+  // a static page pulling in a full TS package for four numbers isn't worth it.
+  // If risk-thresholds.ts ever changes, update here too.
+  const RISK_THRESHOLDS = { LOW_MAX: 0.3, MODERATE_MAX: 1.0, HIGH_MAX: 2.5 };
+
+  function bucketForScore(score) {
+    if (score > RISK_THRESHOLDS.HIGH_MAX) return 'CRITICAL';
+    if (score >= RISK_THRESHOLDS.MODERATE_MAX) return 'HIGH';
+    if (score >= RISK_THRESHOLDS.LOW_MAX) return 'MODERATE';
+    return 'LOW';
+  }
+
+  async function poll() {
+    const [structures, hazards, alerts] = await Promise.all([
+      fetch('/api/structures').then(r => r.json()),
+      fetch('/api/hazards').then(r => r.json()),
+      fetch('/api/alerts').then(r => r.json()),
+    ]);
+
+    document.querySelector('#structures-table tbody').innerHTML = structures.structures
+      .map(s => `<tr><td>${s.name}</td><td>${s.structureType}</td></tr>`).join('');
+
+    document.querySelector('#hazards-table tbody').innerHTML = hazards.hazards
+      .map(h => `<tr><td>M${h.magnitude}</td><td>${h.locationName ?? ''}</td><td>${new Date(h.occurredAt).toLocaleString()}</td></tr>`).join('');
+
+    document.querySelector('#alerts-table tbody').innerHTML = alerts.alerts
+      .map(a => {
+        const bucket = bucketForScore(Number(a.riskScore));
+        return `<tr class="bucket-${bucket}"><td>${a.structureName}</td><td>M${a.hazardMagnitude} — ${a.hazardPlace}</td><td>${Number(a.riskScore).toFixed(2)} (${bucket})</td><td>${a.deliveredAt ? 'delivered' : 'pending'}</td></tr>`;
+      }).join('');
+  }
+
+  poll();
+  setInterval(poll, 10_000);
+</script>
+</body>
+</html>

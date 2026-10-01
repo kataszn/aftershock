@@ -10,8 +10,10 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@hono/node-server": "^2.1.3",
     "@repo/db": "workspace:*",
-    "@repo/shared": "workspace:*"
+    "@repo/shared": "workspace:*",
+    "hono": "^4.13.12"
   },
   "devDependencies": {
     "tsx": "^4.19.2",
