@@ -1,4 +1,5 @@
 import { defineConfig } from 'drizzle-kit';
+import './src/env';
 
 export default defineConfig({
   schema: './src/schema.ts',

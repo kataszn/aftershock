@@ -1,8 +1,6 @@
 # Dependencies
 node_modules/
-
-# Turbo
-.turbo/
+*.lock
 
 # Build outputs
 dist/

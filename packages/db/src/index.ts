@@ -1,2 +1,3 @@
+export { db } from './client';
 export * from './schema';
-export { db, pool } from './client';
+export { eq, and, gte, lte, asc } from 'drizzle-orm'; 

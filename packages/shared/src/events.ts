@@ -7,7 +7,7 @@ export type HazardDetected = {
   lat: number;
   lon: number;
   depthKm: number;
-  occurredAt: Date;
+  occurredAt: string; // ISO string — Date doesn't survive JSON over SQS
 };
 
 export type AlertTriggered = {

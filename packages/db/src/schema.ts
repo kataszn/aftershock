@@ -17,7 +17,7 @@ export const seismicEvents = pgTable(
   (t) => [index('seismic_events_occurred_at_idx').on(t.occurredAt)],
 );
 
-// Structure — 'bridge' | 'building' | 'dam' | 'pipeline', class 'A' | 'B' | 'C' | 'D'
+// Structure — 'dam' | 'bridge' | 'unreinforced_masonry' | 'reinforced_high_rise' | 'generic_structure'
 export const structures = pgTable('structures', {
   id: text('id').primaryKey().$defaultFn(() => createId()),
   name: text('name').notNull(),
