@@ -1,5 +1,5 @@
-import { db, desc, eq } from '@repo/db';
-import { alerts, structures, seismicEvents } from '@repo/db/schema';
+import { db, desc, eq, sql } from '@repo/db';
+import { alerts, structures, seismicEvents, alertDeliveries } from '@repo/db/schema';
 
 export async function listRecentAlerts(limit = 50) {
   return db
@@ -8,15 +8,18 @@ export async function listRecentAlerts(limit = 50) {
       riskScore: alerts.riskScore,
       threshold: alerts.threshold,
       createdAt: alerts.createdAt,
-      deliveredAt: alerts.deliveredAt,
       structureName: structures.name,
       structureType: structures.structureType,
       hazardMagnitude: seismicEvents.magnitude,
       hazardPlace: seismicEvents.locationName,
+      deliveredCount: sql<number>`count(*) filter (where ${alertDeliveries.status} = 'DELIVERED')`,
+      totalSubscribers: sql<number>`count(${alertDeliveries.id})`,
     })
     .from(alerts)
     .innerJoin(structures, eq(alerts.structureId, structures.id))
     .innerJoin(seismicEvents, eq(alerts.seismicEventId, seismicEvents.id))
+    .leftJoin(alertDeliveries, eq(alertDeliveries.alertId, alerts.id))
+    .groupBy(alerts.id, structures.name, structures.structureType, seismicEvents.magnitude, seismicEvents.locationName)
     .orderBy(desc(alerts.createdAt))
     .limit(limit);
 }

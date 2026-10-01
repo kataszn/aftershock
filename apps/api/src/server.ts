@@ -5,6 +5,7 @@ import path from 'node:path';
 import { hazardsRouter } from './features/hazards/api/v1/router';
 import { structuresRouter } from './features/structures/api/v1/router';
 import { alertsRouter } from './features/alerts/api/v1/router';
+import { webhookTestRouter } from './features/webhooks/api/v1/router';
 
 
 const app = new Hono();
@@ -14,6 +15,7 @@ app.get('/health', (c) => c.text('ok'));
 app.route('/api/hazards', hazardsRouter);
 app.route('/api/structures', structuresRouter);
 app.route('/api/alerts', alertsRouter);
+app.route('/api/webhooks', webhookTestRouter);
 
 
 const here = path.dirname(fileURLToPath(import.meta.url));
