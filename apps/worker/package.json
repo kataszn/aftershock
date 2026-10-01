@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "bundle": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
     "start": "tsx src/index.ts",
     "tc": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
@@ -16,6 +17,7 @@
     "dotenv": "^18.0.4"
   },
   "devDependencies": {
+    "esbuild": "^0.25.12",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
