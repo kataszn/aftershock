@@ -3,7 +3,7 @@
 // EventBridge-invoked HTTP handler is what calls runIngestCycle().
 
 import { fetchUsgsFeed } from './usgs.client';
-import { ingestHazardEvent } from './ingest-hazard-event';
+import { ingestHazardEvent } from '@repo/db';
 
 const POLL_INTERVAL_MS = 60_000;
 

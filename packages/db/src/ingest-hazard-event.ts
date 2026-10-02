@@ -1,10 +1,16 @@
-// Idempotent ingest: insert-or-skip on USGS's own event ID, write an outbox
-// row only when the insert actually happened. One transaction, one guarantee:
-// re-polling the feed never creates duplicate downstream work.
+import { db } from './client';
+import { seismicEvents, outbox } from './schema';
 
-import { db } from '@repo/db';
-import { seismicEvents, outbox } from '@repo/db';
-import type { RawHazardEvent } from './usgs.client';
+export type RawHazardEvent = {
+  id: string;
+  magnitude: number;
+  place: string;
+  occurredAt: Date;
+  lat: number;
+  lon: number;
+  depthKm: number;
+  isReplay?: boolean;
+};
 
 export async function ingestHazardEvent(event: RawHazardEvent): Promise<{ inserted: boolean }> {
   return db.transaction(async (tx) => {
@@ -18,19 +24,16 @@ export async function ingestHazardEvent(event: RawHazardEvent): Promise<{ insert
         lon: event.lon.toString(),
         locationName: event.place,
         occurredAt: event.occurredAt,
+        isReplay: event.isReplay ?? false,
       })
       .onConflictDoNothing({ target: seismicEvents.id })
       .returning({ id: seismicEvents.id });
 
-    if (inserted.length === 0) {
-      // Already ingested on a prior poll — nothing new to relay downstream.
-      return { inserted: false };
-    }
+    if (inserted.length === 0) return { inserted: false };
 
     await tx.insert(outbox).values({
       eventType: 'hazard.detected',
       payload: {
-        type: 'hazard.detected',
         hazardEventId: event.id,
         magnitude: event.magnitude,
         lat: event.lat,

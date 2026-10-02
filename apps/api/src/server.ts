@@ -7,6 +7,7 @@ import { hazardsRouter } from './features/hazards/api/v1/router';
 import { structuresRouter } from './features/structures/api/v1/router';
 import { alertsRouter } from './features/alerts/api/v1/router';
 import { webhookTestRouter } from './features/webhooks/api/v1/router';
+import { replayRouter } from './features/replay/api/v1/router';
 
 
 const app = new Hono();
@@ -20,7 +21,7 @@ app.route('/api/hazards', hazardsRouter);
 app.route('/api/structures', structuresRouter);
 app.route('/api/alerts', alertsRouter);
 app.route('/api/webhooks', webhookTestRouter);
-
+app.route('/api/replay', replayRouter);
 
 // Resolve the static root in both dev (tsx, src/) and bundled (dist/) modes.
 const here = path.dirname(fileURLToPath(import.meta.url));

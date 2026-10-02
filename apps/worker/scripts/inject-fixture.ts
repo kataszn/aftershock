@@ -3,7 +3,7 @@
 // bypasses fetchUsgsFeed() only, everything downstream (outbox, relay,
 // queue, scoring) runs exactly as it would live. Run with: tsx worker/src/scripts/inject-fixture.ts
 
-import { ingestHazardEvent } from '../src/ingest/ingest-hazard-event';
+import { ingestHazardEvent } from '@repo/db';
 import type { RawHazardEvent } from '../src/ingest/usgs.client';
 
 const MIYAZAKI_M7_1: RawHazardEvent = {

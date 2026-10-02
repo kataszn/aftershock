@@ -1,0 +1,1 @@
+ALTER TABLE "seismic_events" ADD COLUMN "is_replay" boolean DEFAULT false NOT NULL;

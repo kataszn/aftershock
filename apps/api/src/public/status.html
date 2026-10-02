@@ -18,6 +18,17 @@
   <p>Real-time seismic hazard exposure monitoring — real USGS events, durable event-driven pipeline.</p>
 
   <section>
+    <h2>Try It Live</h2>
+    <p style="font-size:0.85rem;color:#555;">
+      Replays a real, recorded USGS earthquake into the live pipeline — not a simulated payload.
+      Watch the Alerts table below update within seconds.
+    </p>
+    <button onclick="replay('miyazaki-m7.1')">Replay M7.1 — Miyazaki, Japan (2024)</button>
+    <button onclick="replay('geysers-m2.4')">Replay M2.4 — The Geysers, CA (control, below alert threshold)</button>
+    <p id="replay-status" style="font-size:0.85rem;"></p>
+  </section>
+
+  <section>
     <h2>Monitored Structures</h2>
     <table id="structures-table"><tbody></tbody></table>
   </section>
@@ -53,7 +64,10 @@
       .map(s => `<tr><td>${s.name}</td><td>${s.structureType}</td></tr>`).join('');
 
     document.querySelector('#hazards-table tbody').innerHTML = hazards.hazards
-      .map(h => `<tr><td>M${h.magnitude}</td><td>${h.locationName ?? ''}</td><td>${new Date(h.occurredAt).toLocaleString()}</td></tr>`).join('');
+      .map(h => {
+        const replayTag = h.isReplay ? ' <span style="font-size:0.75rem;color:#888;border:1px solid #ccc;border-radius:3px;padding:1px 5px;">REPLAYED</span>' : '';
+        return `<tr><td>M${h.magnitude}${replayTag}</td><td>${h.locationName ?? ''}</td><td>${new Date(h.occurredAt).toLocaleString()}</td></tr>`;
+      }).join('');
 
     document.querySelector('#alerts-table tbody').innerHTML = alerts.alerts
       .map(a => {
@@ -61,8 +75,18 @@
         const delivery = a.totalSubscribers > 0
           ? `${a.deliveredCount}/${a.totalSubscribers} delivered`
           : 'no subscribers';
-        return `<tr class="bucket-${bucket}"><td>${a.structureName}</td><td>M${a.hazardMagnitude} — ${a.hazardPlace}</td><td>${Number(a.riskScore).toFixed(2)} (${bucket})</td><td>${delivery}</td></tr>`;
+        const replayTag = a.isReplay ? ' <span style="font-size:0.75rem;color:#888;border:1px solid #ccc;border-radius:3px;padding:1px 5px;">REPLAYED</span>' : '';
+        return `<tr class="bucket-${bucket}"><td>${a.structureName}${replayTag}</td><td>M${a.hazardMagnitude} — ${a.hazardPlace}</td><td>${Number(a.riskScore).toFixed(2)} (${bucket})</td><td>${delivery}</td></tr>`;
       }).join('');
+  }
+
+  async function replay(key) {
+    const statusEl = document.getElementById('replay-status');
+    statusEl.textContent = 'Replaying...';
+    const res = await fetch(`/api/replay/${key}`, { method: 'POST' });
+    const data = await res.json();
+    statusEl.textContent = data.note ?? data.error;
+    poll(); // refresh tables immediately rather than waiting for the 10s interval
   }
 
   poll();

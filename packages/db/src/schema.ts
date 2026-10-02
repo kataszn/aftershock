@@ -13,6 +13,9 @@ export const seismicEvents = pgTable(
     locationName: text('location_name'),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
     ingestedAt: timestamp('ingested_at', { withTimezone: true }).notNull().defaultNow(),
+    // True when this event came from a manual replay of a historical USGS
+    // event rather than the live feed — lets the UI label data honestly.
+    isReplay: boolean('is_replay').notNull().default(false),
   },
   (t) => [index('seismic_events_occurred_at_idx').on(t.occurredAt)],
 );
