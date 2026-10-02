@@ -23,14 +23,10 @@ export const metrics = createMetrics('aftershock-api');
 
 const app = new Hono<{ Variables: TelemetryVariables }>();
 
-// Telemetry first so every request (including errors and 404s) is logged and
-// measured. requestLogger attaches a child logger at c.get('log').
+// Telemetry first so that all routes are logged and metrics are collected. 
 app.use('*', requestLogger(logger));
 app.use('*', metricsMiddleware(metrics));
 
-// The standalone web app (apps/web) runs on a different origin than the API,
-// so the browser needs CORS on the API routes. Restrict to known origins in
-// production via CORS_ORIGINS (comma-separated); default to permissive in dev.
 const corsOrigins = process.env.CORS_ORIGINS?.split(',').map((o) => o.trim()).filter(Boolean);
 app.use(
   '/api/*',
@@ -43,9 +39,7 @@ app.use(
 
 app.get('/health', (c) => c.text('ok'));
 
-// Prometheus exposition endpoint. CloudWatch can ingest this via the
-// CloudWatch agent's Prometheus scrape config (ECS service discovery or a
-// sidecar), or an ADOT collector can remote-write it.
+// Prometheus exposition endpoint. 
 app.get('/metrics', async (c) => {
   return c.body(await metrics.render(), 200, { 'Content-Type': metrics.contentType });
 });
