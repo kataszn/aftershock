@@ -8,7 +8,7 @@ import { structuresRouter } from './features/structures/api/v1/router';
 import { alertsRouter } from './features/alerts/api/v1/router';
 import { webhookTestRouter } from './features/webhooks/api/v1/router';
 import { replayRouter } from './features/replay/api/v1/router';
-
+import { dashboardRouter } from './features/dashboard/api/v1/router';
 
 const app = new Hono();
 
@@ -17,6 +17,7 @@ app.get('/health', (c) => c.text('ok'));
 // Root serves the status dashboard.
 app.get('/', (c) => c.redirect('/status.html'));
 
+app.route('/api/dashboard', dashboardRouter);
 app.route('/api/hazards', hazardsRouter);
 app.route('/api/structures', structuresRouter);
 app.route('/api/alerts', alertsRouter);
