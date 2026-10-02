@@ -5,6 +5,7 @@ import { alerts } from '@repo/db/schema';
 import { outbox } from '@repo/db/schema';
 import type { RiskBucket } from '../jobs/scoring';
 import { thresholdCrossedFor } from '@repo/shared';
+import { logger, metrics } from '../telemetry';
 
 
 export type DispatchAlertArgs = {
@@ -52,4 +53,10 @@ export async function dispatchAlert({
       },
     });
   });
+
+  metrics.alertsTriggeredTotal.inc({ bucket });
+  logger.info(
+    { hazardEventId, structureId, riskScore, bucket },
+    'alert triggered',
+  );
 }

@@ -2,16 +2,22 @@ import { pollQueue } from '../infra/queue.client';
 import { processHazardEvent } from './handlers/hazard-handler';
 import { sendAlertWebhook } from '../alerts/webhook-sender';
 import type { Job } from '../infra/queue.client';
+import { logger, metrics } from '../telemetry';
 
 export async function startJobConsumer(): Promise<void> {
   for await (const { job, ack } of pollQueue()) {
+    const endTimer = metrics.jobDuration.startTimer({ event_type: job.eventType });
     try {
-      console.log('from queue:', job);
+      logger.debug({ outboxId: job.outboxId, eventType: job.eventType }, 'job received');
       await processJob(job);
       await ack();
+      endTimer();
+      metrics.jobsProcessedTotal.inc({ event_type: job.eventType, result: 'success' });
     } catch (err) {
       // No ack on failure — SQS redelivers after visibility timeout.
-      console.error(`Failed to process job (outboxId: ${job.outboxId}):`, err);
+      endTimer();
+      metrics.jobsProcessedTotal.inc({ event_type: job.eventType, result: 'error' });
+      logger.error({ err, outboxId: job.outboxId, eventType: job.eventType }, 'failed to process job');
     }
   }
 }
@@ -25,6 +31,6 @@ async function processJob(job: Job): Promise<void> {
       await sendAlertWebhook(job.payload);
       break;
     default:
-      console.warn(`Unrecognised job event type, skipping: ${job.eventType}`);
+      logger.warn({ eventType: job.eventType }, 'unrecognised job event type, skipping');
   }
 }

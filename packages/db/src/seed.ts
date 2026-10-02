@@ -4,6 +4,9 @@
 import { and, eq, notInArray } from 'drizzle-orm';
 import { db } from './client';
 import { structures, webhookSubscriptions } from './schema';
+import { createLogger } from '@repo/telemetry';
+
+const logger = createLogger({ service: 'aftershock-seed' });
 
 const SEED_STRUCTURES = [
   // Japan — near the Miyazaki fixture, for an end-to-end demo run
@@ -36,7 +39,7 @@ const SEED_WEBHOOKS_SUBSCRIPTIONS = [
 ];
 
 async function seedStructures() {
-  console.log(`Seeding ${SEED_STRUCTURES.length} structures...`);
+  logger.info({ count: SEED_STRUCTURES.length }, 'seeding structures');
 
   let inserted = 0;
   let skipped = 0;
@@ -51,11 +54,14 @@ async function seedStructures() {
     const match = existing[0];
     if (match) {
       if (match.structureType === s.structureType) {
-        console.log(`Skip ${s.name} — already exists with matching type`);
+        logger.debug({ name: s.name }, 'skip structure — already exists with matching type');
         skipped++;
         continue;
       }
-      console.log(`Skip ${s.name} — already exists with different type (${match.structureType})`);
+      logger.warn(
+        { name: s.name, existingType: match.structureType, seedType: s.structureType },
+        'skip structure — already exists with different type',
+      );
       skipped++;
       continue;
     }
@@ -69,11 +75,11 @@ async function seedStructures() {
     inserted++;
   }
 
-  console.log(`Done. Inserted ${inserted}, skipped ${skipped}.`);
+  logger.info({ inserted, skipped }, 'structures seeded');
 }
 
 async function seedWebhookSubscriptions() {
-  console.log(`Seeding ${SEED_WEBHOOKS_SUBSCRIPTIONS.length} webhook subscriptions...`);
+  logger.info({ count: SEED_WEBHOOKS_SUBSCRIPTIONS.length }, 'seeding webhook subscriptions');
 
   let inserted = 0;
   let updated = 0;
@@ -99,7 +105,7 @@ async function seedWebhookSubscriptions() {
           .where(eq(webhookSubscriptions.id, match.id));
         updated++;
       }
-      console.log(`Skip webhook ${w.url} — already exists (${match.active ? 'active' : 'reactivated'})`);
+      logger.debug({ url: w.url, active: match.active }, 'skip webhook — already exists');
       continue;
     }
 
@@ -119,19 +125,19 @@ async function seedWebhookSubscriptions() {
 
   deactivated = stale.rowCount ?? 0;
 
-  console.log(`Done. Webhooks inserted ${inserted}, updated ${updated}, deactivated ${deactivated}.`);
+  logger.info({ inserted, updated, deactivated }, 'webhook subscriptions seeded');
 }
 
 async function seed() {
-  console.log('[SEED STARTED]');
+  logger.info('seed started');
   await seedStructures();
   await seedWebhookSubscriptions();
-  console.log('[SEED COMPLETED]');
+  logger.info('seed completed');
 }
 
 seed()
   .then(() => process.exit(0))
   .catch((err) => {
-    console.error('Seed failed:', err);
+    logger.error({ err }, 'seed failed');
     process.exit(1);
   });

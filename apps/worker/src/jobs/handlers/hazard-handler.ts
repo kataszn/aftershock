@@ -6,6 +6,7 @@ import { scoreRisk } from '../scoring';
 import { bucketForScore, MIN_ALERTABLE_MAGNITUDE } from '@repo/shared';
 import { runJobExecution } from '../job-execution';
 import { dispatchAlert } from '../../alerts/dispatch-alert';
+import { logger, metrics } from '../../telemetry';
 
 function assertHazardDetected(payload: unknown): HazardDetected {
   const p = payload as Partial<HazardDetected>;
@@ -37,7 +38,10 @@ export async function processHazardEvent(rawPayload: unknown): Promise<void> {
       distanceKm: haversineDistanceKm(event.lat, event.lon, Number(s.lat), Number(s.lon)),
     }))
     .filter(({ distanceKm }) => distanceKm <= radiusKm);
-  console.log('debug: inRange structures:', inRange, inRange.length);
+  logger.debug(
+    { hazardEventId: event.hazardEventId, radiusKm, inRange: inRange.length },
+    'geo-match complete',
+  );
 
   for (const { structure, distanceKm } of inRange) {
     const idempotencyKey = `job:${event.hazardEventId}:${structure.id}`;
@@ -55,7 +59,11 @@ export async function processHazardEvent(rawPayload: unknown): Promise<void> {
         });
         const bucket = bucketForScore(riskScore);
         const alertTriggered = bucket === 'HIGH' || bucket === 'CRITICAL';
-        console.log('debug:', { riskScore, bucket, alertTriggered });
+        metrics.riskAssessmentsTotal.inc({ bucket });
+        logger.debug(
+          { hazardEventId: event.hazardEventId, structureId: structure.id, riskScore, bucket, alertTriggered },
+          'risk scored',
+        );
 
         await db
           .insert(riskAssessments)

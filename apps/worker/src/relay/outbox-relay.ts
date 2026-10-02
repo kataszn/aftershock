@@ -2,6 +2,7 @@ import { db } from '@repo/db';
 import { outbox } from '@repo/db/schema';
 import { eq, asc } from '@repo/db';
 import { enqueueJob } from '../infra/queue.client';
+import { logger, metrics } from '../telemetry';
 
 const RELAY_INTERVAL_MS = 5_000;
 const BATCH_SIZE = 20;
@@ -13,6 +14,8 @@ export async function relayPendingOutboxRows(): Promise<void> {
     .where(eq(outbox.status, 'PENDING'))
     .orderBy(asc(outbox.createdAt))
     .limit(BATCH_SIZE);
+
+  metrics.outboxPending.set(pending.length);
 
   for (const row of pending) {
     try {
@@ -26,21 +29,24 @@ export async function relayPendingOutboxRows(): Promise<void> {
         .update(outbox)
         .set({ status: 'SENT', sentAt: new Date() })
         .where(eq(outbox.id, row.id));
+
+      metrics.outboxRelayedTotal.inc({ result: 'sent' });
     } catch (err) {
       // On failure leave as PENDING — next relay tick retries. 
       // If enqueueJob succeeds but the status update fails,
       // this would re-send a message SQS already has. The queue consumer's
       // idempotency (job_executions / risk_assessments unique constraints)
       // protects against this.
-      console.error(`Failed to relay outbox row ${row.id}:`, err);
+      metrics.outboxRelayedTotal.inc({ result: 'error' });
+      logger.error({ err, outboxId: row.id }, 'failed to relay outbox row');
     }
   }
 }
 
 export function startOutboxRelay(): void {
-  relayPendingOutboxRows().catch((err) => console.error('Initial relay tick failed:', err));
+  relayPendingOutboxRows().catch((err) => logger.error({ err }, 'initial relay tick failed'));
 
   setInterval(() => {
-    relayPendingOutboxRows().catch((err) => console.error('Relay tick failed:', err));
+    relayPendingOutboxRows().catch((err) => logger.error({ err }, 'relay tick failed'));
   }, RELAY_INTERVAL_MS);
 }

@@ -1,6 +1,7 @@
 import { db, eq, and } from '@repo/db';
 import { alerts, webhookSubscriptions, alertDeliveries } from '@repo/db/schema';
 import { createHmac } from 'node:crypto';
+import { logger, metrics } from '../telemetry';
 
 type AlertTriggeredPayload = {
   alertId: string;
@@ -49,13 +50,18 @@ async function deliverToSubscriber(
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (sub.secret) headers['X-Signature'] = signPayload(body, sub.secret);
 
+    const endTimer = metrics.webhookDeliveryDuration.startTimer();
     const res = await fetch(sub.url, { method: 'POST', headers, body });
+    endTimer();
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     await db
       .update(alertDeliveries)
       .set({ status: 'DELIVERED', deliveredAt: new Date(), attempts: existing.attempts + 1 })
       .where(eq(alertDeliveries.id, existing.id));
+
+    metrics.webhookDeliveriesTotal.inc({ result: 'delivered' });
+    logger.info({ alertId, subscriptionId: sub.id, url: sub.url }, 'webhook delivered');
   } catch (err) {
     await db
       .update(alertDeliveries)
@@ -65,6 +71,11 @@ async function deliverToSubscriber(
         lastError: err instanceof Error ? err.message : String(err),
       })
       .where(eq(alertDeliveries.id, existing.id));
+    metrics.webhookDeliveriesTotal.inc({ result: 'failed' });
+    logger.error(
+      { err, alertId, subscriptionId: sub.id, url: sub.url },
+      'webhook delivery failed',
+    );
     throw err; // re-thrown per-subscriber, caught by allSettled below
   }
 }

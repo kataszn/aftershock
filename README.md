@@ -66,11 +66,37 @@ Scores bucket into `LOW`, `MODERATE`, `HIGH`, and `CRITICAL`. This is an enginee
 
 Waiting for a real magnitude 4+ earthquake to land near a seeded structure during a short review window isn't realistic. The status page includes a replay feature that pushes real, previously recorded USGS events (not fabricated payloads) through the live pipeline on demand. Each replay gets a fresh identifier so concurrent replays don't collide with the deduplication logic that protects the real feed, and every replayed record is tagged `isReplay: true` and marked `REPLAYED` in the UI, so replayed and live data stay honestly distinguishable.
 
+## Telemetry & observability
+
+Both services emit structured logs and Prometheus metrics through a shared `@repo/telemetry` package.
+
+**Structured logging (pino).** Every log line is newline-delimited JSON, so CloudWatch Logs Insights can query fields directly (`fields @timestamp, msg, hazardEventId | filter level = "error"`). In development the `dev` scripts pipe stdout through [`pino-colada`](https://github.com/lrlna/pino-colada) for human-readable output, so the logger itself always emits JSON and nothing extra ships to production. The API attaches a per-request child logger with a `requestId` (honouring an inbound `x-request-id`) and logs one access line per request with method, path, status, and latency — health-check and metrics-scrape paths are skipped in production to keep the log stream signal-dense, but logged in development. Secrets and webhook signatures are redacted before they reach the log stream.
+
+**Prometheus metrics.** The API exposes `GET /metrics`; the worker runs a small HTTP server on `METRICS_PORT` (default `9464`) exposing `/metrics` and `/health`. Both registries include Node process metrics (CPU, memory, event-loop lag, GC) plus domain metrics:
+
+| Metric | Type | Meaning |
+|---|---|---|
+| `aftershock_http_requests_total` | counter | API requests by method/route/status |
+| `aftershock_http_request_duration_seconds` | histogram | API request latency |
+| `aftershock_ingest_events_total` | counter | USGS events by outcome (inserted/duplicate/error) |
+| `aftershock_ingest_cycle_duration_seconds` | histogram | Full ingest cycle duration |
+| `aftershock_outbox_relayed_total` | counter | Outbox rows relayed to SQS by outcome |
+| `aftershock_outbox_pending_batch` | gauge | Pending outbox rows in the last relay batch |
+| `aftershock_jobs_processed_total` | counter | Queue jobs by event type and outcome |
+| `aftershock_job_duration_seconds` | histogram | Queue job processing latency |
+| `aftershock_risk_assessments_total` | counter | Risk assessments by bucket |
+| `aftershock_alerts_triggered_total` | counter | Alerts triggered by bucket |
+| `aftershock_webhook_deliveries_total` | counter | Webhook deliveries by outcome |
+| `aftershock_webhook_delivery_duration_seconds` | histogram | Webhook delivery latency |
+
+Every series carries a `service` label (`aftershock-api` / `aftershock-worker`) so a single scrape config can distinguish them. CloudWatch ingests these via the CloudWatch agent's Prometheus scrape configuration (ECS service discovery) or an ADOT collector remote-writing to CloudWatch. Set `LOG_LEVEL` to control verbosity (defaults to `debug` in dev, `info` in production).
+
 ## Tech stack
 
 - TypeScript, pnpm workspace monorepo
 - [Hono](https://hono.dev/) for the API
 - [Drizzle ORM](https://orm.drizzle.team/) + [Neon](https://neon.tech/) serverless Postgres
+- [pino](https://getpino.io/) structured logging + [prom-client](https://github.com/siimon/prom-client) metrics
 - AWS SQS (standard queue + DLQ), AWS Fargate (two services), Application Load Balancer
 - Podman for containerization
 - [Kiro](https://kiro.dev/) for AWS-side IAM policy and task definition generation during deployment
@@ -82,8 +108,9 @@ apps/
   api/      # Hono service: REST endpoints, status page, replay endpoint
   worker/   # USGS poller, outbox relay, SQS job consumer
 packages/
-  db/       # Drizzle schema, client, shared ingest logic
-  shared/   # Event types, geo math, risk thresholds
+  db/         # Drizzle schema, client, shared ingest logic
+  shared/     # Event types, geo math, risk thresholds
+  telemetry/  # pino logger factory + prom-client registry/middleware
 ```
 
 ## Running locally
@@ -128,7 +155,7 @@ See `scripts/deploy.sh` for the exact steps. Task definitions are not committed 
 - The structure portfolio is a small, fixed seed set (eight real, named structures), not a real asset registry. A production version would make this a customer-managed resource.
 - The risk formula is intentionally simple and legible, not a calibrated engineering standard. See [Risk scoring](#risk-scoring) above.
 - The USGS feed is polled, not pushed, so there's some detection latency between a real event and the system picking it up.
-- No infrastructure telemetry dashboard (live ALB/ECS/SQS metrics) is included, a deliberate scope cut, not an oversight.
+- Metrics are exposed for scraping, but no CloudWatch dashboard or alarms are provisioned in this repo — the scrape/ingest wiring is left to the deployment environment.
 
 ## License
 

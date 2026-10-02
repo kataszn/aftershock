@@ -1,0 +1,14 @@
+{
+  "name": "@repo/telemetry",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "hono": "^4.13.12",
+    "pino": "^9.6.0",
+    "prom-client": "^15.1.3"
+  }
+}

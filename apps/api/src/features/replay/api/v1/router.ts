@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { ingestHazardEvent } from '@repo/db';
 import { HISTORICAL_EVENTS, type HistoricalEventKey } from '@repo/shared';
+import type { TelemetryVariables } from '@repo/telemetry';
 
-export const replayRouter = new Hono();
+export const replayRouter = new Hono<{ Variables: TelemetryVariables }>();
 
 replayRouter.post('/:eventKey', async (c) => {
   const eventKey = c.req.param('eventKey') as HistoricalEventKey;
@@ -24,6 +25,11 @@ replayRouter.post('/:eventKey', async (c) => {
   };
 
   const result = await ingestHazardEvent(replayEvent);
+
+  c.get('log').info(
+    { eventKey, replayId: replayEvent.id, inserted: result.inserted },
+    'historical event replayed',
+  );
 
   return c.json({
     ...result,
