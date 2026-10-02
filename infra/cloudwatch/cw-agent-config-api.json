@@ -1,0 +1,25 @@
+{
+  "logs": {
+    "metrics_collected": {
+      "prometheus": {
+        "prometheus_config": {
+          "global": {
+            "scrape_interval": "1m",
+            "scrape_timeout": "10s"
+          },
+          "scrape_configs": [
+            {
+              "job_name": "aftershock-api",
+              "static_configs": [
+                {
+                  "targets": ["localhost:3000"]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "force_flush_interval": 5
+  }
+}

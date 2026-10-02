@@ -77,19 +77,40 @@ Both services emit structured logs and Prometheus metrics through a shared `@rep
 | Metric | Type | Meaning |
 |---|---|---|
 | `aftershock_http_requests_total` | counter | API requests by method/route/status |
-| `aftershock_http_request_duration_seconds` | histogram | API request latency |
+| `aftershock_http_request_duration_seconds` | summary | API request latency (p50/p90/p99) |
 | `aftershock_ingest_events_total` | counter | USGS events by outcome (inserted/duplicate/error) |
-| `aftershock_ingest_cycle_duration_seconds` | histogram | Full ingest cycle duration |
+| `aftershock_ingest_cycle_duration_seconds` | summary | Full ingest cycle duration (p50/p90/p99) |
 | `aftershock_outbox_relayed_total` | counter | Outbox rows relayed to SQS by outcome |
 | `aftershock_outbox_pending_batch` | gauge | Pending outbox rows in the last relay batch |
 | `aftershock_jobs_processed_total` | counter | Queue jobs by event type and outcome |
-| `aftershock_job_duration_seconds` | histogram | Queue job processing latency |
+| `aftershock_job_duration_seconds` | summary | Queue job processing latency (p50/p90/p99) |
 | `aftershock_risk_assessments_total` | counter | Risk assessments by bucket |
 | `aftershock_alerts_triggered_total` | counter | Alerts triggered by bucket |
 | `aftershock_webhook_deliveries_total` | counter | Webhook deliveries by outcome |
-| `aftershock_webhook_delivery_duration_seconds` | histogram | Webhook delivery latency |
+| `aftershock_webhook_delivery_duration_seconds` | summary | Webhook delivery latency (p50/p90/p99) |
 
-Every series carries a `service` label (`aftershock-api` / `aftershock-worker`) so a single scrape config can distinguish them. CloudWatch ingests these via the CloudWatch agent's Prometheus scrape configuration (ECS service discovery) or an ADOT collector remote-writing to CloudWatch. Set `LOG_LEVEL` to control verbosity (defaults to `debug` in dev, `info` in production).
+Every series carries a `service` label (`aftershock-api` / `aftershock-worker`) so a single scrape config can distinguish them. Latency metrics are **summaries, not histograms** — the CloudWatch agent drops Prometheus histogram metrics, so summaries are what actually reach CloudWatch. Set `LOG_LEVEL` to control verbosity (defaults to `debug` in dev, `info` in production).
+
+### CloudWatch ingestion
+
+The CloudWatch agent runs as a **sidecar container** in each task definition, scraping `localhost` (the worker on `:9464`, the API on `:3000`) and remote-writing to the `Prometheus` namespace. This avoids ECS Service Discovery entirely — the agent shares the task's network namespace, so no cross-task networking is needed.
+
+Provision the AWS side (SSM parameters, IAM policies, and alarms) with:
+
+```bash
+pnpm telemetry:setup
+```
+
+This is idempotent and creates:
+
+- **SSM parameters** `/aftershock/cw-agent-config-{api,worker}` — the agent scrape configs (`infra/cloudwatch/`).
+- **IAM inline policies** on both task roles — `cloudwatch:PutMetricData` (scoped to the `Prometheus` namespace) and `ssm:GetParameters` (`infra/iam/`).
+- **CloudWatch alarms** on the three critical failure states:
+  - `aftershock-outbox-stagnation` — `aftershock_outbox_pending_batch > 50` for 3 datapoints in 3 minutes (relay stalled or SQS blocking).
+  - `aftershock-webhook-delivery-failures` — `aftershock_webhook_deliveries_total{result="failed"} > 10` in 5 minutes (egress or client endpoint failures).
+  - `aftershock-ingest-latency-p90` — `aftershock_ingest_cycle_duration_seconds{quantile="0.9"} > 30s` (USGS polling hanging).
+
+Set `SNS_ALARM_TOPIC_ARN` to wire the alarms to an SNS topic for notifications.
 
 ## Tech stack
 

@@ -9,7 +9,8 @@
     "db:studio": "pnpm --filter @repo/db db:studio",
     "test": "vitest run",
     "tc": "tsc --noEmit",
-    "deploy:aws": "bash scripts/deploy.sh"
+    "deploy:aws": "bash scripts/deploy.sh",
+    "telemetry:setup": "bash scripts/setup-telemetry.sh"
   },
   "packageManager": "pnpm@10.26.2",
   "devDependencies": {

@@ -2,8 +2,8 @@
   "family": "aftershock-api",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
-  "cpu": "256",
-  "memory": "512",
+  "cpu": "512",
+  "memory": "1024",
   "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/aftershock-ecs-execution-role",
   "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/aftershock-api-task-role",
   "containerDefinitions": [
@@ -47,6 +47,26 @@
         "timeout": 5,
         "retries": 3,
         "startPeriod": 15
+      }
+    },
+    {
+      "name": "cwagent",
+      "image": "public.ecr.aws/cloudwatch-agent/cloudwatch-agent:latest",
+      "essential": false,
+      "secrets": [
+        {
+          "name": "CW_CONFIG_CONTENT",
+          "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/aftershock/cw-agent-config-api"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/aftershock-api-cwagent",
+          "awslogs-region": "<REGION>",
+          "awslogs-stream-prefix": "cwagent",
+          "awslogs-create-group": "true"
+        }
       }
     }
   ]

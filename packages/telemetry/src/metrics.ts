@@ -2,7 +2,7 @@ import {
   Registry,
   Counter,
   Gauge,
-  Histogram,
+  Summary,
   collectDefaultMetrics,
 } from 'prom-client';
 
@@ -10,6 +10,11 @@ import {
  * The full metric surface for a service. Every service gets its own registry
  * (and therefore its own `/metrics` payload) so the API and worker never
  * collide on metric names when scraped independently.
+ *
+ * Latency metrics are Summaries, not Histograms: the CloudWatch agent drops
+ * Prometheus histogram metrics (it only supports counter, gauge, and summary),
+ * so summaries are what actually reach CloudWatch. Summaries expose `_sum`,
+ * `_count`, and quantile series, which is enough for p90-style alarms.
  */
 export type Metrics = {
   registry: Registry;
@@ -18,11 +23,11 @@ export type Metrics = {
 
   // HTTP (API)
   httpRequestsTotal: Counter<'method' | 'route' | 'status'>;
-  httpRequestDuration: Histogram<'method' | 'route' | 'status'>;
+  httpRequestDuration: Summary<'method' | 'route' | 'status'>;
 
   // Ingest (worker)
   ingestEventsTotal: Counter<'result'>;
-  ingestCycleDuration: Histogram<string>;
+  ingestCycleDuration: Summary<string>;
 
   // Outbox relay (worker)
   outboxRelayedTotal: Counter<'result'>;
@@ -30,13 +35,13 @@ export type Metrics = {
 
   // Job consumer (worker)
   jobsProcessedTotal: Counter<'event_type' | 'result'>;
-  jobDuration: Histogram<'event_type'>;
+  jobDuration: Summary<'event_type'>;
 
   // Domain outcomes (worker)
   riskAssessmentsTotal: Counter<'bucket'>;
   alertsTriggeredTotal: Counter<'bucket'>;
   webhookDeliveriesTotal: Counter<'result'>;
-  webhookDeliveryDuration: Histogram<string>;
+  webhookDeliveryDuration: Summary<string>;
 };
 
 /**
@@ -59,11 +64,13 @@ export function createMetrics(service: string): Metrics {
     registers: [registry],
   });
 
-  const httpRequestDuration = new Histogram({
+  const httpRequestDuration = new Summary({
     name: 'aftershock_http_request_duration_seconds',
     help: 'HTTP request latency in seconds.',
     labelNames: ['method', 'route', 'status'] as const,
-    buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
+    percentiles: [0.5, 0.9, 0.99],
+    maxAgeSeconds: 300,
+    ageBuckets: 5,
     registers: [registry],
   });
 
@@ -74,10 +81,12 @@ export function createMetrics(service: string): Metrics {
     registers: [registry],
   });
 
-  const ingestCycleDuration = new Histogram({
+  const ingestCycleDuration = new Summary({
     name: 'aftershock_ingest_cycle_duration_seconds',
     help: 'Duration of a full ingest cycle in seconds.',
-    buckets: [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+    percentiles: [0.5, 0.9, 0.99],
+    maxAgeSeconds: 300,
+    ageBuckets: 5,
     registers: [registry],
   });
 
@@ -101,11 +110,13 @@ export function createMetrics(service: string): Metrics {
     registers: [registry],
   });
 
-  const jobDuration = new Histogram({
+  const jobDuration = new Summary({
     name: 'aftershock_job_duration_seconds',
     help: 'Queue job processing duration in seconds.',
     labelNames: ['event_type'] as const,
-    buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+    percentiles: [0.5, 0.9, 0.99],
+    maxAgeSeconds: 300,
+    ageBuckets: 5,
     registers: [registry],
   });
 
@@ -130,10 +141,12 @@ export function createMetrics(service: string): Metrics {
     registers: [registry],
   });
 
-  const webhookDeliveryDuration = new Histogram({
+  const webhookDeliveryDuration = new Summary({
     name: 'aftershock_webhook_delivery_duration_seconds',
     help: 'Webhook delivery latency in seconds.',
-    buckets: [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+    percentiles: [0.5, 0.9, 0.99],
+    maxAgeSeconds: 300,
+    ageBuckets: 5,
     registers: [registry],
   });
 
