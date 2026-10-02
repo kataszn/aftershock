@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts | pino-colada",
+    "dev": "tsx watch src/index.ts | aftershock-pretty",
     "bundle": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
     "start": "tsx src/index.ts",
     "tc": "tsc --noEmit",
@@ -19,7 +19,6 @@
   },
   "devDependencies": {
     "esbuild": "^0.25.12",
-    "pino-colada": "^2.2.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }

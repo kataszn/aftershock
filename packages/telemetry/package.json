@@ -6,6 +6,9 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "bin": {
+    "aftershock-pretty": "./bin/pretty.mjs"
+  },
   "dependencies": {
     "hono": "^4.13.12",
     "pino": "^9.6.0",

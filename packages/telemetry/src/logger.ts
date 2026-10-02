@@ -14,9 +14,9 @@ export type CreateLoggerOptions = {
  *
  * Always emits newline-delimited JSON — the format CloudWatch Logs Insights
  * expects, where every field is queryable without a parser. In development the
- * `dev` script pipes stdout through `pino-colada` for human-readable output,
- * so the logger itself never needs a pretty transport (and nothing extra is
- * pulled into the production bundle).
+ * `dev` script pipes stdout through the `aftershock-pretty` formatter (see
+ * `bin/pretty.mjs`) for human-readable output, so the logger itself never needs
+ * a pretty transport (and nothing extra is pulled into the production bundle).
  */
 export function createLogger({ service, level }: CreateLoggerOptions): Logger {
   const isProd = process.env.NODE_ENV === 'production';
