@@ -7,6 +7,7 @@ import { haversineDistanceKm } from './utils/geospatial';
 import './App.css';
 
 const POLL_INTERVAL_MS = 10_000;
+const DEFAULT_STRUCTURE_NAME = 'Nichinan Coastal Bridge';
 
 const REPLAY_ACTIONS = [
   {
@@ -84,7 +85,7 @@ export default function App() {
     if (structures.length === 0) return;
     const match = activeAlert
       ? structures.find((s) => s.name === activeAlert.structureName)
-      : undefined;
+      : structures.find((s) => s.name === DEFAULT_STRUCTURE_NAME);
     setActiveStructureId((match ?? structures[0])?.id ?? null);
   }, [snapshot, activeAlert]);
 
@@ -330,7 +331,7 @@ export default function App() {
             <section className="panel">
               <div className="panel-header">
                 <h2 className="panel-title">Portfolio coverage</h2>
-                <span className="panel-kicker">Select to inspect</span>
+                <span className="panel-kicker">Structures covered</span>
               </div>
               <div className="structure-list">
                 {structures.length === 0 ? (
