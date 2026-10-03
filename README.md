@@ -6,16 +6,20 @@ Aftershock watches the live USGS earthquake feed, matches incoming events agains
 
 The infrastructure is the point of the project, not a wrapper around an AI call. Everything in this pipeline, the transactional outbox, the idempotency guarantees, the dead-letter handling, the per-subscriber delivery tracking, is real and tested, not a simplification left for later.
 
+**Live app:** https://aftershock-web-five.vercel.app/ · **API:** https://aftershock.kataszn.me
+
 ## Architecture
 
 ![Aftershock architecture](./arch.svg)
 
-Two independently deployed services, deliberately not one bundled task:
+Two independently deployed AWS services, deliberately not one bundled task:
 
 - **worker** (no public ingress): polls the USGS feed, relays a transactional outbox to SQS, and consumes jobs for risk scoring and webhook delivery.
-- **api** (behind an Application Load Balancer, public): a Hono service serving read endpoints, the public status page, and a judge-facing event replay endpoint.
+- **api** (behind an Application Load Balancer, public, custom domain via ACM): a Hono service serving read endpoints and a judge-facing event replay endpoint.
 
-Splitting these was a reliability decision. A bug in the worker should never be able to take down the public-facing status page.
+Splitting these was a reliability decision. A bug in the worker should never be able to take down the public-facing API.
+
+Sitting outside AWS entirely is a third piece: **apps/web**, a React/Vite frontend (dashboard + 3D hazard viewer) deployed on Vercel. It's a decoupled edge client, not a third backend service, it talks to `apps/api` over HTTPS through the ALB the same way any external consumer would. Keeping it outside the AWS deployment means the backend's reliability story stays exactly as described above, the frontend is additive, not load-bearing for pipeline correctness.
 
 ```
 USGS feed → poll loop → [seismic_events + outbox, same transaction]
@@ -33,12 +37,12 @@ USGS feed → poll loop → [seismic_events + outbox, same transaction]
 
 ## How it works
 
-1. A background poller pulls new events from the USGS feed at a fixed interval. Each new event (deduplicated on USGS's own event ID) is written to the database and a transactional outbox entry in the same transaction.
+1. A background poller pulls new events from the USGS feed at a fixed interval. Each new event (deduplicated on USGS's own event ID) is written to the database and a transactional outbox entry in the same transaction. The judge-facing replay endpoint (below) writes through this same path from `apps/api`.
 2. An outbox relay picks up pending rows and pushes them to SQS.
 3. A job consumer reads the queue, filters out events below magnitude 4.0, and geo-matches the remaining ones against the structure portfolio within a magnitude-scaled search radius.
 4. Each in-range structure gets a risk score. Scores at or above the HIGH threshold create an alert, written alongside another outbox entry in the same transaction.
 5. The alert is relayed to SQS and delivered as a signed webhook to every active subscriber, tracked individually so a failed delivery to one subscriber never blocks or duplicates delivery to another.
-6. A public status page shows monitored structures, recent hazard events, generated alerts, and delivery outcomes, and includes a replay feature to trigger the full pipeline on demand using real historical USGS events.
+6. The frontend (dashboard + 3D viewer, see below) shows monitored structures, recent hazard events, generated alerts, and delivery outcomes, and includes a replay feature to trigger the full pipeline on demand using real historical USGS events.
 
 ## Risk scoring
 
@@ -62,15 +66,19 @@ Scores bucket into `LOW`, `MODERATE`, `HIGH`, and `CRITICAL`. This is an enginee
 - **Per-subscriber webhook delivery tracking**: a redelivered alert job only retries the subscribers that previously failed, not everyone.
 - **Dead-letter queue**: messages that fail repeatedly (5 receives) are isolated instead of retried forever.
 
+## 3D hazard viewer
+
+The dashboard (`apps/web`) includes a 3D scene (React Three Fiber + Drei) that renders a hazard event and its nearby structures in actual relative space, hypocenter depth, distance to each structure, and risk score are all projected from the real geo-matching math already running in the backend, not a separate illustrative model. It's most meaningful around the Miyazaki fixture, where the seeded structure portfolio actually clusters, since that's where a real or replayed event produces more than one in-range structure to look at. The numbers shown are pulled directly from `risk_assessments`, nothing is recalculated or re-estimated for the scene.
+
 ## Demo / event replay
 
-Waiting for a real magnitude 4+ earthquake to land near a seeded structure during a short review window isn't realistic. The status page includes a replay feature that pushes real, previously recorded USGS events (not fabricated payloads) through the live pipeline on demand. Each replay gets a fresh identifier so concurrent replays don't collide with the deduplication logic that protects the real feed, and every replayed record is tagged `isReplay: true` and marked `REPLAYED` in the UI, so replayed and live data stay honestly distinguishable.
+Waiting for a real magnitude 4+ earthquake to land near a seeded structure during a short review window isn't realistic. The dashboard includes a replay feature that pushes real, previously recorded USGS events (not fabricated payloads) through the live pipeline on demand. Each replay gets a fresh identifier so concurrent replays don't collide with the deduplication logic that protects the real feed, and every replayed record is tagged `isReplay: true` and marked `REPLAYED` in the UI, so replayed and live data stay honestly distinguishable.
 
 ## Telemetry & observability
 
 Both services emit structured logs and Prometheus metrics through a shared `@repo/telemetry` package.
 
-**Structured logging (pino).** Every log line is newline-delimited JSON, so CloudWatch Logs Insights can query fields directly (`fields @timestamp, msg, hazardEventId | filter level = "error"`). In development the `dev` scripts pipe stdout through a small custom formatter (`aftershock-pretty`, in `packages/telemetry/bin/pretty.mjs`) that renders the message plus **every** structured field — unlike `pino-colada`, which silently drops fields it doesn't recognise. The logger itself always emits JSON, so nothing extra ships to production. The API attaches a per-request child logger with a `requestId` (honouring an inbound `x-request-id`) and logs one access line per request with method, path, status, and latency — health-check and metrics-scrape paths are skipped in production to keep the log stream signal-dense, but logged in development. Secrets and webhook signatures are redacted before they reach the log stream.
+**Structured logging (pino).** Every log line is newline-delimited JSON, so CloudWatch Logs Insights can query fields directly (`fields @timestamp, msg, hazardEventId | filter level = "error"`). In development, the `dev` scripts pipe stdout through a small custom formatter (`aftershock-pretty`, in `packages/telemetry/bin/pretty.mjs`) that renders the message plus every structured field, unlike `pino-colada`, which silently drops fields it doesn't recognize. The logger itself always emits JSON, so nothing extra ships to production. The API attaches a per-request child logger with a `requestId` (honoring an inbound `x-request-id`) and logs one access line per request with method, path, status, and latency, health-check and metrics-scrape paths are skipped in production to keep the log stream signal-dense, but logged in development. Secrets and webhook signatures are redacted before they reach the log stream.
 
 **Prometheus metrics.** The API exposes `GET /metrics`; the worker runs a small HTTP server on `METRICS_PORT` (default `9464`) exposing `/metrics` and `/health`. Both registries include Node process metrics (CPU, memory, event-loop lag, GC) plus domain metrics:
 
@@ -89,11 +97,11 @@ Both services emit structured logs and Prometheus metrics through a shared `@rep
 | `aftershock_webhook_deliveries_total` | counter | Webhook deliveries by outcome |
 | `aftershock_webhook_delivery_duration_seconds` | summary | Webhook delivery latency (p50/p90/p99) |
 
-Every series carries a `service` label (`aftershock-api` / `aftershock-worker`) so a single scrape config can distinguish them. Latency metrics are **summaries, not histograms** — the CloudWatch agent drops Prometheus histogram metrics, so summaries are what actually reach CloudWatch. Set `LOG_LEVEL` to control verbosity (defaults to `debug` in dev, `info` in production).
+Every series carries a `service` label (`aftershock-api` / `aftershock-worker`) so a single scrape config can distinguish them. Latency metrics are summaries, not histograms, the CloudWatch agent drops Prometheus histogram metrics, so summaries are what actually reach CloudWatch. Set `LOG_LEVEL` to control verbosity (defaults to `debug` in dev, `info` in production).
 
 ### CloudWatch ingestion
 
-The CloudWatch agent runs as a **sidecar container** in each task definition, scraping `localhost` (the worker on `:9464`, the API on `:3000`) and remote-writing to the `Prometheus` namespace. This avoids ECS Service Discovery entirely — the agent shares the task's network namespace, so no cross-task networking is needed.
+The CloudWatch agent runs as a sidecar container in each task definition, scraping `localhost` (the worker on `:9464`, the API on `:3000`) and remote-writing to the `Prometheus` namespace. This avoids ECS Service Discovery entirely, the agent shares the task's network namespace, so no cross-task networking is needed.
 
 Provision the AWS side (SSM parameters, IAM policies, and alarms) with:
 
@@ -103,12 +111,12 @@ pnpm telemetry:setup
 
 This is idempotent and creates:
 
-- **SSM parameters** `/aftershock/cw-agent-config-{api,worker}` — the agent scrape configs (`infra/cloudwatch/`).
-- **IAM inline policies** on both task roles — `cloudwatch:PutMetricData` (scoped to the `Prometheus` namespace) and `ssm:GetParameters` (`infra/iam/`).
+- **SSM parameters** `/aftershock/cw-agent-config-{api,worker}`, the agent scrape configs (`infra/cloudwatch/`).
+- **IAM inline policies** on both task roles, `cloudwatch:PutMetricData` (scoped to the `Prometheus` namespace) and `ssm:GetParameters` (`infra/iam/`).
 - **CloudWatch alarms** on the three critical failure states:
-  - `aftershock-outbox-stagnation` — `aftershock_outbox_pending_batch > 50` for 3 datapoints in 3 minutes (relay stalled or SQS blocking).
-  - `aftershock-webhook-delivery-failures` — `aftershock_webhook_deliveries_total{result="failed"} > 10` in 5 minutes (egress or client endpoint failures).
-  - `aftershock-ingest-latency-p90` — `aftershock_ingest_cycle_duration_seconds{quantile="0.9"} > 30s` (USGS polling hanging).
+  - `aftershock-outbox-stagnation`, `aftershock_outbox_pending_batch > 50` for 3 datapoints in 3 minutes (relay stalled or SQS blocking).
+  - `aftershock-webhook-delivery-failures`, `aftershock_webhook_deliveries_total{result="failed"} > 10` in 5 minutes (egress or client endpoint failures).
+  - `aftershock-ingest-latency-p90`, `aftershock_ingest_cycle_duration_seconds{quantile="0.9"} > 30s` (USGS polling hanging).
 
 Set `SNS_ALARM_TOPIC_ARN` to wire the alarms to an SNS topic for notifications.
 
@@ -117,17 +125,19 @@ Set `SNS_ALARM_TOPIC_ARN` to wire the alarms to an SNS topic for notifications.
 - TypeScript, pnpm workspace monorepo
 - [Hono](https://hono.dev/) for the API
 - [Drizzle ORM](https://orm.drizzle.team/) + [Neon](https://neon.tech/) serverless Postgres
-- [pino](https://getpino.io/) structured logging + [prom-client](https://github.com/siimon/prom-client) metrics
-- AWS SQS (standard queue + DLQ), AWS Fargate (two services), Application Load Balancer
+- [pino](https://getpino.io/) structured logging + [prom-client](https://github.com/siimon/prom-client) metrics, shipped to CloudWatch via a sidecar agent
+- AWS SQS (standard queue + DLQ), AWS Fargate (two services), Application Load Balancer with a custom domain via ACM
 - Podman for containerization
-- [Kiro](https://kiro.dev/) for AWS-side IAM policy and task definition generation during deployment
+- [Kiro](https://kiro.dev/) for AWS-side IAM policy and task definition generation, and for live deployment execution
+- React, Vite, React Three Fiber + Drei for the frontend (dashboard + 3D hazard viewer), deployed independently on [Vercel](https://vercel.com/)
 
 ## Project structure
 
 ```
 apps/
-  api/      # Hono service: REST endpoints, status page, replay endpoint
-  worker/   # USGS poller, outbox relay, SQS job consumer
+  api/        # Hono service: REST endpoints, replay endpoint
+  worker/     # USGS poller, outbox relay, SQS job consumer
+  web/        # React/Vite frontend: dashboard + 3D hazard viewer (deployed on Vercel)
 packages/
   db/         # Drizzle schema, client, shared ingest logic
   shared/     # Event types, geo math, risk thresholds
@@ -146,12 +156,15 @@ cp .env.example .env
 pnpm db:migrate
 pnpm --filter @repo/db exec tsx src/seed.ts
 
-# run both services
+# run the backend services
 pnpm --filter @repo/worker dev
 pnpm --filter @repo/api dev
+
+# run the frontend (proxies /api to localhost:8000 by default, see apps/web/vite.config.ts)
+pnpm --filter @repo/web dev
 ```
 
-`apps/api` serves the status page at `/status.html` once running, by default on `http://localhost:8000`.
+`apps/api` runs on `http://localhost:8000` by default. `apps/web`'s dev server address is printed by Vite on startup; set `VITE_API_PROXY_TARGET` if your API runs somewhere other than `localhost:8000`.
 
 ## Testing
 
@@ -163,7 +176,7 @@ Unit tests cover the risk-scoring formula against real historical fixtures (a ve
 
 ## Deployment
 
-Both services deploy to AWS Fargate behind their own task definitions. A local deployment script handles the full cycle (build, push to ECR, register the task definition, force a new ECS deployment):
+The two AWS services deploy to Fargate behind their own task definitions. A local deployment script handles the full cycle (build, push to ECR, register the task definition, force a new ECS deployment):
 
 ```bash
 pnpm deploy:aws
@@ -171,12 +184,14 @@ pnpm deploy:aws
 
 See `scripts/deploy.sh` for the exact steps. Task definitions are not committed to the repo (they contain account-specific ARNs); see `api-task-def.example.json` and `worker-task-def.example.json` for sanitized templates.
 
+`apps/web` deploys independently via Vercel (connected to this repo, builds from `apps/web`). It is not part of `pnpm deploy:aws`.
+
 ## Known limitations
 
 - The structure portfolio is a small, fixed seed set (eight real, named structures), not a real asset registry. A production version would make this a customer-managed resource.
 - The risk formula is intentionally simple and legible, not a calibrated engineering standard. See [Risk scoring](#risk-scoring) above.
 - The USGS feed is polled, not pushed, so there's some detection latency between a real event and the system picking it up.
-- Metrics are exposed for scraping, but no CloudWatch dashboard or alarms are provisioned in this repo — the scrape/ingest wiring is left to the deployment environment.
+- The 3D viewer is most useful around events that produce multiple in-range structures (like the Miyazaki fixture), rather than being a general-purpose viewer for any arbitrary location.
 
 ## License
 
