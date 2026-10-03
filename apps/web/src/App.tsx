@@ -96,7 +96,6 @@ export default function App() {
   const handleReplay = useCallback(
     async (key: string) => {
       setReplayStatus('Replaying…');
-      setActiveAlert(null);
       try {
         const data = await triggerReplay(key);
         setReplayStatus(data.note ?? data.error ?? 'Replay submitted.');

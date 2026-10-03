@@ -1,4 +1,4 @@
-import { listRecentHazards } from '../../hazards/infra/hazard.repo';
+import { countHazards, listRecentHazards } from '../../hazards/infra/hazard.repo';
 import { listStructures } from '../../structures/infra/structure.repo';
 import { listRecentAlerts } from '../../alerts/infra/alert.repo';
 
@@ -19,8 +19,9 @@ export interface DashboardSnapshot {
 }
 
 export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
-  const [structures, hazards, alerts] = await Promise.all([
+  const [structures, hazardCount, hazards, alerts] = await Promise.all([
     listStructures(),
+    countHazards(),
     listRecentHazards(12),
     listRecentAlerts(10),
   ]);
@@ -32,7 +33,7 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
     generatedAt: new Date().toISOString(),
     summary: {
       totalStructures: structures.length,
-      totalHazards: hazards.length,
+      totalHazards: hazardCount,
       totalAlerts: alerts.length,
       highRiskAlerts,
       deliveryCoverage,
