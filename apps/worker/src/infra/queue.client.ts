@@ -1,7 +1,3 @@
-// SQS specifics stop here. pollQueue() yields domain-shaped Jobs, not
-// SQS messages — receiptHandle is kept internally for acking, not exposed
-// as part of the job's shape past this boundary.
-
 import {
   SQSClient,
   SendMessageCommand,
