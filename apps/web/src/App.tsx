@@ -76,18 +76,16 @@ export default function App() {
     setActiveAlert(top ?? null);
   }, [snapshot]);
 
-  // Keep the active structure in sync with the top alert (so the caption and
-  // the rendered mesh never disagree), unless the user has manually selected
-  // one. Falls back to the first structure when there is no alert yet.
+  // Keep the active structure anchored to a stable default unless the user has
+  // manually selected one. The 3D view is intentionally static; replay events
+  // update the hazard context, not the rendered structure.
   useEffect(() => {
     if (manualSelectionRef.current) return;
     const structures = snapshot?.structures ?? [];
     if (structures.length === 0) return;
-    const match = activeAlert
-      ? structures.find((s) => s.name === activeAlert.structureName)
-      : structures.find((s) => s.name === DEFAULT_STRUCTURE_NAME);
+    const match = structures.find((s) => s.name === DEFAULT_STRUCTURE_NAME);
     setActiveStructureId((match ?? structures[0])?.id ?? null);
-  }, [snapshot, activeAlert]);
+  }, [snapshot]);
 
   const handleSelectStructure = useCallback((id: string) => {
     manualSelectionRef.current = true;
@@ -212,7 +210,7 @@ export default function App() {
 
         {nearbyStructures.length > 0 && (
           <div className="scene-structure-picker">
-            <span className="scene-picker-label">Structures near this hazard</span>
+            <span className="scene-picker-label">Reference structures</span>
             <div className="scene-picker-list">
               {nearbyStructures.map(({ structure, distanceKm }) => (
                 <button
