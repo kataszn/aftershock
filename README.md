@@ -4,8 +4,6 @@ Real-time seismic hazard exposure monitoring for critical infrastructure. Built 
 
 Aftershock watches the live USGS earthquake feed, matches incoming events against a portfolio of real-world structures (bridges, dams, buildings), scores each one for exposure risk based on magnitude, distance, depth, and structure type, and delivers alerts as signed webhooks through a durable, event-driven pipeline.
 
-The infrastructure is the point of the project, not a wrapper around an AI call. Everything in this pipeline, the transactional outbox, the idempotency guarantees, the dead-letter handling, the per-subscriber delivery tracking, is real and tested, not a simplification left for later.
-
 **Live app:** https://aftershock-web-five.vercel.app/ · **API:** https://aftershock.kataszn.me
 
 ## Architecture
