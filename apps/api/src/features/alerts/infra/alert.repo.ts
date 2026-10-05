@@ -1,6 +1,19 @@
 import { db, desc, eq, sql } from '@repo/db';
 import { alerts, structures, seismicEvents, alertDeliveries } from '@repo/db/schema';
 
+export async function countAlerts(): Promise<number> {
+  const result = await db.select({ count: sql<number>`count(*)` }).from(alerts);
+  return Number(result[0]?.count ?? 0);
+}
+
+export async function countCriticalAlerts(): Promise<number> {
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(alerts)
+    .where(sql`${alerts.riskScore} > 2.5`);
+  return Number(result[0]?.count ?? 0);
+}
+
 export async function listRecentAlerts(limit = 50) {
   return db
     .select({

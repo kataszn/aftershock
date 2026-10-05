@@ -44,6 +44,7 @@ export interface DashboardSummary {
   totalHazards: number;
   totalAlerts: number;
   highRiskAlerts: number;
+  criticalAlerts: number;
   deliveryCoverage: number;
 }
 

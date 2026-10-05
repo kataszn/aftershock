@@ -111,11 +111,6 @@ export default function App() {
   const hazards = snapshot?.hazards ?? [];
   const alerts = snapshot?.alerts ?? [];
 
-  const criticalCount = useMemo(
-    () => alerts.filter((a) => bucketForScore(Number(a.riskScore)) === 'CRITICAL').length,
-    [alerts],
-  );
-
   // The structure the 3D scene is actually rendering — the caption reads from
   // this same source so the two can never disagree.
   const activeStructure = useMemo(
@@ -143,7 +138,7 @@ export default function App() {
     { label: 'Monitored assets', value: summary?.totalStructures ?? 0, foot: 'portfolio entries' },
     { label: 'Hazards ingested', value: summary?.totalHazards ?? 0, foot: 'recent USGS events' },
     { label: 'Alerts created', value: summary?.totalAlerts ?? 0, foot: 'risk breaches ≥ HIGH' },
-    { label: 'Critical alerts', value: criticalCount, foot: '> 2.5 risk score' },
+    { label: 'Critical alerts', value: summary?.criticalAlerts ?? 0, foot: '> 2.5 risk score' },
   ];
 
   return (

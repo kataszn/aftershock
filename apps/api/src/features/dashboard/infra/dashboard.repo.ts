@@ -1,12 +1,13 @@
 import { countHazards, listRecentHazards } from '../../hazards/infra/hazard.repo';
 import { listStructures } from '../../structures/infra/structure.repo';
-import { listRecentAlerts } from '../../alerts/infra/alert.repo';
+import { countAlerts, countCriticalAlerts, listRecentAlerts } from '../../alerts/infra/alert.repo';
 
 export interface DashboardSummary {
   totalStructures: number;
   totalHazards: number;
   totalAlerts: number;
   highRiskAlerts: number;
+  criticalAlerts: number;
   deliveryCoverage: number;
 }
 
@@ -19,14 +20,15 @@ export interface DashboardSnapshot {
 }
 
 export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
-  const [structures, hazardCount, hazards, alerts] = await Promise.all([
+  const [structures, hazardCount, hazards, alerts, alertCount, criticalCount] = await Promise.all([
     listStructures(),
     countHazards(),
     listRecentHazards(12),
     listRecentAlerts(10),
+    countAlerts(),
+    countCriticalAlerts(),
   ]);
 
-  const highRiskAlerts = alerts.filter((alert) => Number(alert.riskScore) >= 1.0).length;
   const deliveryCoverage = alerts.reduce((sum, alert) => sum + Number(alert.totalSubscribers ?? 0), 0);
 
   return {
@@ -34,8 +36,9 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
     summary: {
       totalStructures: structures.length,
       totalHazards: hazardCount,
-      totalAlerts: alerts.length,
-      highRiskAlerts,
+      totalAlerts: alertCount,
+      highRiskAlerts: alertCount,
+      criticalAlerts: criticalCount,
       deliveryCoverage,
     },
     structures,
