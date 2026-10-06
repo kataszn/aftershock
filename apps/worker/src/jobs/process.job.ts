@@ -27,9 +27,18 @@ async function processJob(job: Job): Promise<void> {
     case 'hazard.detected':
       await processHazardEvent(job.payload);
       break;
-    case 'alert.triggered':
-      await sendAlertWebhook(job.payload);
+    case 'alert.triggered': {
+      try {
+        await sendAlertWebhook(job.payload);
+      } catch (err) {
+        if (err instanceof Error && err.message.startsWith('Malformed alert.triggered payload')) {
+          logger.error({ err, outboxId: job.outboxId, eventType: job.eventType, payload: job.payload }, 'invalid alert.triggered payload, acknowledging message');
+          return;
+        }
+        throw err;
+      }
       break;
+    }
     default:
       logger.warn({ eventType: job.eventType }, 'unrecognised job event type, skipping');
   }
