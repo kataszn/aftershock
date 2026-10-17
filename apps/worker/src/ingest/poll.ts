@@ -6,9 +6,22 @@ import { fetchUsgsFeed } from './usgs.client';
 import { ingestHazardEvent } from '@repo/db';
 import { logger, metrics } from '../telemetry';
 
-const POLL_INTERVAL_MS = 60_000;
+// Poll cadence. BASE is how often we check while events are actively landing.
+// A cycle that ingests nothing doubles the wait (capped at MAX) so a quiet feed
+// costs far fewer DB round-trips; any cycle that inserts an event snaps the
+// cadence straight back to BASE. The USGS feed returns duplicates for up to an
+// hour, so "inserted === 0" is the signal that there is genuinely nothing new
+// to write and no reason to keep hitting the DB at full rate.
+const BASE_POLL_INTERVAL_MS = 60_000;
+const MAX_POLL_INTERVAL_MS = 15 * 60_000;
+const BACKOFF_MULTIPLIER = 2;
 
-export async function runIngestCycle(): Promise<void> {
+export type IngestCycleResult = {
+  fetched: number;
+  inserted: number;
+};
+
+export async function runIngestCycle(): Promise<IngestCycleResult> {
   const endTimer = metrics.ingestCycleDuration.startTimer();
   const events = await fetchUsgsFeed();
 
@@ -34,12 +47,47 @@ export async function runIngestCycle(): Promise<void> {
     { fetched: events.length, inserted: insertedCount },
     'ingest cycle complete',
   );
+
+  return { fetched: events.length, inserted: insertedCount };
 }
 
 export function startPolling(): void {
-  runIngestCycle().catch((err) => logger.error({ err }, 'initial ingest cycle failed'));
+  // Self-scheduling timeout rather than setInterval: the delay changes between
+  // cycles, and a timeout can't overlap with a still-running cycle.
+  let intervalMs = BASE_POLL_INTERVAL_MS;
 
-  setInterval(() => {
-    runIngestCycle().catch((err) => logger.error({ err }, 'ingest cycle failed'));
-  }, POLL_INTERVAL_MS);
+  const tick = async (): Promise<void> => {
+    try {
+      const { inserted } = await runIngestCycle();
+
+      if (inserted > 0) {
+        if (intervalMs !== BASE_POLL_INTERVAL_MS) {
+          logger.info(
+            { nextPollMs: BASE_POLL_INTERVAL_MS },
+            'new events ingested, resetting poll cadence',
+          );
+        }
+        intervalMs = BASE_POLL_INTERVAL_MS;
+      } else {
+        const nextMs = Math.min(intervalMs * BACKOFF_MULTIPLIER, MAX_POLL_INTERVAL_MS);
+        if (nextMs !== intervalMs) {
+          logger.info(
+            { nextPollMs: nextMs },
+            'no new events ingested, backing off poll cadence',
+          );
+        }
+        intervalMs = nextMs;
+      }
+    } catch (err) {
+      // A failing fetch/structure shouldn't be retried at full rate either.
+      logger.error({ err }, 'ingest cycle failed');
+      intervalMs = Math.min(intervalMs * BACKOFF_MULTIPLIER, MAX_POLL_INTERVAL_MS);
+    }
+
+    metrics.ingestPollInterval.set(intervalMs / 1000);
+    setTimeout(tick, intervalMs);
+  };
+
+  metrics.ingestPollInterval.set(intervalMs / 1000);
+  void tick();
 }

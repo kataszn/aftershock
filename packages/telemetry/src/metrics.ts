@@ -28,6 +28,7 @@ export type Metrics = {
   // Ingest (worker)
   ingestEventsTotal: Counter<'result'>;
   ingestCycleDuration: Summary<string>;
+  ingestPollInterval: Gauge<string>;
 
   // Outbox relay (worker)
   outboxRelayedTotal: Counter<'result'>;
@@ -87,6 +88,12 @@ export function createMetrics(service: string): Metrics {
     percentiles: [0.5, 0.9, 0.99],
     maxAgeSeconds: 300,
     ageBuckets: 5,
+    registers: [registry],
+  });
+
+  const ingestPollInterval = new Gauge({
+    name: 'aftershock_ingest_poll_interval_seconds',
+    help: 'Current delay between ingest poll cycles; grows while no new events are ingested.',
     registers: [registry],
   });
 
@@ -158,6 +165,7 @@ export function createMetrics(service: string): Metrics {
     httpRequestDuration,
     ingestEventsTotal,
     ingestCycleDuration,
+    ingestPollInterval,
     outboxRelayedTotal,
     outboxPending,
     jobsProcessedTotal,
